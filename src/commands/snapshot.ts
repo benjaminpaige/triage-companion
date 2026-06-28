@@ -4,12 +4,22 @@ import * as git from "../clients/git.ts";
 import * as github from "../clients/github.ts";
 import * as jira from "../clients/jira.ts";
 import * as snyk from "../clients/snyk.ts";
+import { awsCredentialStatus, type AWSCredentialStatus } from "../clients/aws.ts";
 import { read as readCredential } from "../credential-store.ts";
 import {
   listServiceDefinitions,
   resolveServiceState,
   type ServiceId,
 } from "../config-model.ts";
+import {
+  listProjects,
+  type LocalProject,
+} from "../projects.ts";
+import {
+  isToolEnabled,
+  toolAccessSnapshot,
+  type ToolAccessItem,
+} from "../tools.ts";
 import { inlineErrorText } from "./command-utils.ts";
 
 interface SnapshotSection<T> {
@@ -38,10 +48,27 @@ interface SnapshotServiceStatus {
   errors: string[];
 }
 
-interface CompanionSnapshot {
+interface SnapshotProjectIssue {
+  projectName: string;
+  projectRoot: string;
+  githubRepository: string;
+  number: number;
+  title: string;
+  body: string | null;
+  url: string;
+  author: string | null;
+  labels: string[];
+  updatedAt: Date;
+}
+
+export interface CompanionSnapshot {
   schema: "triage_companion_snapshot.v1";
   generatedAt: string;
+  toolAccess: ToolAccessItem[];
   serviceStatus: SnapshotServiceStatus[];
+  projects: SnapshotSection<LocalProject>;
+  projectIssues: SnapshotSection<SnapshotProjectIssue>;
+  awsStatus: AWSCredentialStatus;
   securityFindings: SnapshotSection<SnapshotSecurityFinding>;
   failedWorkflows: SnapshotSection<unknown>;
   dirtyRepositories: SnapshotSection<unknown>;
@@ -139,8 +166,8 @@ async function loadSnykSecurityFindings(): Promise<SnapshotSecurityFinding[]> {
 
 async function securityFindings(): Promise<SnapshotSection<SnapshotSecurityFinding>> {
   const sections = await Promise.all([
-    capture(loadGitHubSecurityFindings),
-    capture(loadSnykSecurityFindings),
+    isToolEnabled("github-security") ? capture(loadGitHubSecurityFindings) : { items: [], errors: [] },
+    isToolEnabled("snyk") ? capture(loadSnykSecurityFindings) : { items: [], errors: [] },
   ]);
 
   return {
@@ -149,9 +176,34 @@ async function securityFindings(): Promise<SnapshotSection<SnapshotSecurityFindi
   };
 }
 
+function projectRepositoryFullNames(): string[] {
+  const repositories: string[] = [];
+  const seen = new Set<string>();
+  for (const project of listProjects()) {
+    if (!project.githubRepository) {
+      continue;
+    }
+    const key = project.githubRepository.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    repositories.push(project.githubRepository);
+  }
+
+  return repositories;
+}
+
 async function failedWorkflows(): Promise<SnapshotSection<unknown>> {
+  if (!isToolEnabled("github-actions")) {
+    return { items: [], errors: [] };
+  }
+
   return capture(async () => {
-    const repos = await github.listSecurityAlertNotificationRepositories();
+    let repos = projectRepositoryFullNames();
+    if (repos.length === 0) {
+      repos = await github.listSecurityAlertNotificationRepositories();
+    }
     if (repos.length === 0) {
       return [];
     }
@@ -159,25 +211,76 @@ async function failedWorkflows(): Promise<SnapshotSection<unknown>> {
   });
 }
 
-async function buildSnapshot(): Promise<CompanionSnapshot> {
+async function projects(): Promise<SnapshotSection<LocalProject>> {
+  if (!isToolEnabled("local-projects")) {
+    return { items: [], errors: [] };
+  }
+
+  return capture(() => listProjects());
+}
+
+async function projectIssues(): Promise<SnapshotSection<SnapshotProjectIssue>> {
+  if (!isToolEnabled("github-issues") || !isToolEnabled("local-projects")) {
+    return { items: [], errors: [] };
+  }
+
+  return capture(async () => {
+    const items: SnapshotProjectIssue[] = [];
+    for (const project of listProjects()) {
+      if (!project.githubRepository) {
+        continue;
+      }
+
+      const issues = await github.listRepositoryIssues(project.githubRepository, { limit: 25 });
+      items.push(
+        ...issues.map((issue) => ({
+          projectName: project.name,
+          projectRoot: project.root,
+          githubRepository: project.githubRepository as string,
+          ...issue,
+        })),
+      );
+    }
+
+    return items;
+  });
+}
+
+export async function buildSnapshot(): Promise<CompanionSnapshot> {
   const [
+    projectsSection,
+    projectIssuesSection,
     securityFindingsSection,
     failedWorkflowsSection,
     dirtyRepositoriesSection,
     openPullRequestsSection,
     jiraTicketsSection,
   ] = await Promise.all([
+    projects(),
+    projectIssues(),
     securityFindings(),
     failedWorkflows(),
-    capture(() => git.listDirtyRepositories({ maxResults: 100 })),
-    capture(() => github.listMyOpenPullRequests({})),
-    capture(() => jira.listOpenTickets()),
+    isToolEnabled("local-projects")
+      ? capture(() => git.listDirtyRepositories({ maxResults: 100 }))
+      : { items: [], errors: [] },
+    isToolEnabled("github-pull-requests")
+      ? capture(() => github.listMyOpenPullRequests({}))
+      : { items: [], errors: [] },
+    isToolEnabled("jira")
+      ? capture(() => jira.listOpenTickets())
+      : { items: [], errors: [] },
   ]);
 
   return {
     schema: "triage_companion_snapshot.v1",
     generatedAt: new Date().toISOString(),
+    toolAccess: toolAccessSnapshot(),
     serviceStatus: serviceStatus(),
+    projects: projectsSection,
+    projectIssues: projectIssuesSection,
+    awsStatus: isToolEnabled("aws")
+      ? awsCredentialStatus()
+      : { configured: false, sources: [], profile: null, errors: [] },
     securityFindings: securityFindingsSection,
     failedWorkflows: failedWorkflowsSection,
     dirtyRepositories: dirtyRepositoriesSection,

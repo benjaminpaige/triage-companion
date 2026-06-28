@@ -9,3 +9,8 @@ export { listMyOpenPullRequests } from "./github-prs.ts";
 export { resolveCurrentRepositoryFullName } from "./github-remotes.ts";
 export { listSecurityAlerts } from "./github-alerts.ts";
 export { listFailedWorkflowRuns } from "./github-workflows.ts";
+export {
+  getRepositoryIssue,
+  listRepositoryIssues,
+  type GitHubIssue,
+} from "./github-issues.ts";

@@ -6,7 +6,7 @@ import path from "node:path";
 import { Command } from "commander";
 
 import { register } from "./config.ts";
-import { findCommand, runRegisteredCommand } from "./test-support.test.ts";
+import { findCommand, optionLongNames, runRegisteredCommand } from "./test-support.test.ts";
 import { readSearchRootsConfig } from "../config.ts";
 import { resetCache } from "../credential-store.ts";
 
@@ -52,6 +52,15 @@ describe("config command registration", () => {
       findCommand(config, "show").description(),
       "Show configured values without exposing secrets",
     );
+    assert.equal(
+      findCommand(config, "enabled-tools").description(),
+      "Save enabled tool ids for settings/sidebar filtering",
+    );
+    assert.equal(
+      findCommand(config, "reset-enabled-tools").description(),
+      "Reset enabled tools to all supported tools",
+    );
+    assert.deepEqual(optionLongNames(findCommand(config, "tools")), ["--json"]);
     assert.equal(
       findCommand(config, "git-search-roots").description(),
       "Save Git repository search roots",

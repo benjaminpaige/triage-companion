@@ -42,6 +42,10 @@ triage-companion status
 triage-companion config show
 triage-companion github notifications
 triage-companion github failed-workflows
+triage-companion projects list
+triage-companion projects issues <name>
+triage-companion projects issue-context <name> <issue-number>
+triage-companion aws status
 triage-companion snyk issues
 triage-companion jira tickets
 triage-companion git dirty
@@ -59,6 +63,10 @@ The menu can:
 - Set, replace, or remove GitHub, Snyk, and Jira credentials.
 - Set or reset the Snyk US-hosted REST API base URL.
 - View configured values without printing secret values.
+- Turn supported tools on or off for app/sidebar filtering.
+- Add named local project roots and associate them with GitHub repositories.
+- Inspect GitHub issues for a configured local project and emit issue context for Codex input.
+- Check whether AWS CLI-compatible credentials are available locally without printing secret values.
 - Inspect GitHub notifications, failed GitHub Actions workflows, GitHub security alerts, Snyk issues, severity-filtered Snyk issues, Jira tickets, and Git status.
 - List your open GitHub PRs normally, with a GitHub login override, or with a custom author regex.
 - Edit Git search roots and clear stored roots back to the defaults when no env override is set.
@@ -131,6 +139,7 @@ Minimum permissions:
 - `github mark-read`: classic personal access token with the `notifications` scope; GitHub does not support fine-grained PATs for notification endpoints
 - `github security-alerts`: fine-grained token with `Dependabot alerts: read`; classic token with `security_events` for public repositories or `repo` for private repositories
 - `github failed-workflows`: fine-grained token with `Actions: read`; classic token with `repo` for private repositories
+- `projects issues` and project issue context: fine-grained token with `Issues: read`; classic token with `repo` for private repositories
 - `github my-open-prs`: no token is required for local git discovery, but if local git identity is unavailable a configured token lets the CLI infer your GitHub login; a token is also used to read PR or commit metadata that local git cannot provide
 
 `github failed-workflows` checks the current GitHub clone when no repository is provided.
@@ -143,6 +152,71 @@ Home-relative search roots such as `~/repos` are supported there too.
 If multiple pull requests share the same commit SHA, `github my-open-prs` matches them by the pull request head branch instead of attributing every matching SHA to the same local branch.
 Set `TRIAGE_COMPANION_GITHUB_PR_IGNORE_BRANCHES` to `[]` if you do not want the default `main`, `master`, and `production` branch exclusions.
 `github mark-read` expects the numeric notification thread ID exactly as shown, with no surrounding whitespace.
+
+### Tool access and local projects
+
+The companion can expose only the tools a user actually uses. This is intended for settings/sidebar UIs in the macOS app and for direct CLI workflows.
+
+List supported tools and their enabled state:
+
+```sh
+triage-companion config tools --json
+```
+
+For a workflow that only uses GitHub issues, local project roots, GitHub Actions, and AWS, save this enabled-tool set:
+
+```sh
+triage-companion config enabled-tools '["github-issues","local-projects","github-actions","aws"]'
+```
+
+Reset to all supported tools:
+
+```sh
+triage-companion config reset-enabled-tools
+```
+
+Add a local project root and associate it with a GitHub repository:
+
+```sh
+triage-companion projects add MyApp /path/to/my-app --github-repo owner/repo
+triage-companion projects list --json
+```
+
+The project root must be a Git repository. The GitHub repository association is optional when adding the project, but it is required for issue and issue-context commands.
+
+List open GitHub issues for a configured project:
+
+```sh
+triage-companion projects issues MyApp --json
+```
+
+Emit issue context for Codex input against the local project:
+
+```sh
+triage-companion projects issue-context MyApp 123 --json
+```
+
+The issue context includes the local project root, associated GitHub repository, issue metadata, issue body, and a Codex-ready prompt. It does not include token or secret values.
+
+`triage-companion snapshot --json` includes `toolAccess`, `projects`, `projectIssues`, and `awsStatus` so the app can render settings, project issue lists, and project-scoped actions from one read-only payload.
+
+### AWS
+
+The AWS integration checks local AWS CLI-compatible credential sources. It does not store AWS access keys in the companion credential store.
+
+Check local AWS credential status:
+
+```sh
+triage-companion aws status --json
+```
+
+Credential sources detected:
+
+- `AWS_ACCESS_KEY_ID` with `AWS_SECRET_ACCESS_KEY`
+- The selected profile in the AWS shared credentials file, usually `~/.aws/credentials`
+- AWS shared config profiles using `credential_process`, SSO, or role configuration
+
+Use `aws sts get-caller-identity` with the same shell/profile when you need live AWS identity verification.
 
 ### Snyk
 
@@ -249,6 +323,7 @@ Supported environment variables:
 - `TRIAGE_COMPANION_SNYK_API_BASE_URL`: Snyk REST API base URL override; allowed US values are `https://api.snyk.io/rest` and `https://api.us.snyk.io/rest`
 - `TRIAGE_COMPANION_SNYK_ORGANIZATION_IDS`: comma-separated Snyk organization IDs to include, with no surrounding whitespace on each ID
 - `GITHUB_TOKEN`: GitHub token used when no token is persisted
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, and `AWS_SHARED_CREDENTIALS_FILE`: detected for AWS credential status; AWS secret values are not persisted by this CLI
 - `SNYK_TOKEN`: Snyk token used when no token is persisted
 - `JIRA_BASE_URL`: Jira base URL override
 - `JIRA_EMAIL`: Jira email override

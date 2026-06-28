@@ -8,6 +8,13 @@ import {
   saveSearchRoots,
   searchRootsEnvOverrideState,
 } from "../config.ts";
+import {
+  listToolDefinitions,
+  parseEnabledToolsInput,
+  readEnabledTools,
+  resetEnabledTools,
+  saveEnabledTools,
+} from "../tools.ts";
 import { ENV } from "../config-model.ts";
 import { runCommand } from "./command-utils.ts";
 
@@ -65,6 +72,53 @@ export function register(program: Command): void {
     .action(() => {
       return runCommand("config show", () => {
         process.stdout.write(buildConfigurationSummary());
+      });
+    });
+
+  cmd
+    .command("enabled-tools")
+    .description("Save enabled tool ids for settings/sidebar filtering")
+    .argument("<tools-json>", "Enabled tool ids as a JSON array")
+    .action((tools: string) => {
+      return runCommand("config enabled-tools", () => {
+        const enabledTools = parseEnabledToolsInput(tools);
+        const savedTools = saveEnabledTools(enabledTools);
+        console.log(
+          `✓ Enabled tools saved: ${savedTools.length > 0 ? savedTools.join(", ") : "(none)"}`,
+        );
+      });
+    });
+
+  cmd
+    .command("reset-enabled-tools")
+    .description("Reset enabled tools to all supported tools")
+    .action(() => {
+      return runCommand("config reset-enabled-tools", () => {
+        resetEnabledTools();
+        console.log("✓ Enabled tools reset to all supported tools.");
+      });
+    });
+
+  cmd
+    .command("tools")
+    .description("List supported tools and enabled state")
+    .option("--json", "Output as JSON", false)
+    .action((opts: { json: boolean }) => {
+      return runCommand("config tools", () => {
+        const enabled = new Set(readEnabledTools());
+        const tools = listToolDefinitions().map((tool) => ({
+          ...tool,
+          enabled: enabled.has(tool.id),
+        }));
+
+        if (opts.json) {
+          console.log(JSON.stringify(tools, null, 2));
+          return;
+        }
+
+        for (const tool of tools) {
+          console.log(`${tool.enabled ? "✓" : "✗"} ${tool.id} - ${tool.name}`);
+        }
       });
     });
 

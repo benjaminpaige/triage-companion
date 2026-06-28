@@ -372,3 +372,31 @@ export function requireWorkflowRunWebURL(
 
   return href;
 }
+
+export function requireGitHubIssueWebURL(
+  value: string | null,
+  context: string,
+  repositoryFullName: string,
+  expectedIssueNumber: number | undefined,
+): string {
+  if (!Number.isSafeInteger(expectedIssueNumber) || (expectedIssueNumber ?? 0) <= 0) {
+    throw new Error(`${context} missing GitHub issue number.`);
+  }
+
+  const href = requireGitHubRepositoryWebURL(value, context, repositoryFullName);
+  const parts = value ? rawGitHubPathSegments(value) : null;
+  if (
+    !parts ||
+    parts.length !== 4 ||
+    parts[2] !== "issues" ||
+    !isPositiveIntegerText(parts[3])
+  ) {
+    throw new Error(`${context} must link to a GitHub issue.`);
+  }
+
+  if (parts[3] !== String(expectedIssueNumber)) {
+    throw new Error(`${context} must link to issue ${expectedIssueNumber}.`);
+  }
+
+  return href;
+}

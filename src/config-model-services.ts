@@ -43,6 +43,12 @@ const SERVICES: Record<ServiceId, ServiceModel> = {
           ],
         },
         {
+          feature: "projects issues",
+          permissions: [
+            "Issues: read for fine-grained tokens; repo for private repositories with classic tokens",
+          ],
+        },
+        {
           feature: "github failed-workflows",
           permissions: [
             "Actions: read for fine-grained tokens; repo for private repositories with classic tokens",

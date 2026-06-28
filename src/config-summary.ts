@@ -17,6 +17,8 @@ import {
   validateGitHubIgnoredBranchNames,
 } from "./config-model.ts";
 import { trimEnvValue } from "./config-path.ts";
+import { listProjects } from "./projects.ts";
+import { readEnabledTools } from "./tools.ts";
 
 function errorMessage(error: unknown): string {
   return escapeControlCharacters(error instanceof Error ? error.message : String(error));
@@ -265,6 +267,35 @@ export function buildConfigurationSummary(): string {
     lines.push(`  Configuration error: ${errorMessage(error)}`);
   }
   lines.push("");
+
+  lines.push("Enabled tools");
+  try {
+    const tools = readEnabledTools();
+    lines.push(`  configured: ${tools.length > 0 ? tools.join(", ") : "(none)"}`);
+  } catch (error) {
+    lines.push(`  Configuration error: ${errorMessage(error)}`);
+  }
+  lines.push("");
+
+  lines.push("Local projects");
+  try {
+    const projects = listProjects();
+    if (projects.length === 0) {
+      lines.push("  configured: (none)");
+    } else {
+      for (const project of projects) {
+        lines.push(
+          `  ${escapeControlCharacters(project.name)}: ${escapeControlCharacters(project.root)}${
+            project.githubRepository ? ` (${project.githubRepository})` : ""
+          }`,
+        );
+      }
+    }
+  } catch (error) {
+    lines.push(`  Configuration error: ${errorMessage(error)}`);
+  }
+  lines.push("");
+
   try {
     lines.push(`Credentials file: ${configFilePath()}`);
   } catch (error) {
