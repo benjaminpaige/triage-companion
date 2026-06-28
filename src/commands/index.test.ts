@@ -11,7 +11,7 @@ describe("command registration", () => {
 
     assert.deepEqual(
       program.commands.map((command) => command.name()),
-      ["github", "snyk", "jira", "git", "status", "config"],
+      ["github", "snyk", "jira", "git", "status", "config", "snapshot"],
     );
   });
 });

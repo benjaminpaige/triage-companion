@@ -6,6 +6,7 @@ import { register as registerJira } from "./jira.ts";
 import { register as registerGit } from "./git.ts";
 import { register as registerStatus } from "./status.ts";
 import { register as registerConfig } from "./config.ts";
+import { register as registerSnapshot } from "./snapshot.ts";
 
 export function registerCommands(program: Command): void {
   registerGitHub(program);
@@ -14,4 +15,5 @@ export function registerCommands(program: Command): void {
   registerGit(program);
   registerStatus(program);
   registerConfig(program);
+  registerSnapshot(program);
 }
